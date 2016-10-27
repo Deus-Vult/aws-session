@@ -1,5 +1,5 @@
-if [ -e "/tmp/aws-token" ]; then
-  export AWS_SECURITY_TOKEN=$(</tmp/aws-token)
+if [ -e "/var/tmp/aws-token" ]; then
+  export AWS_SECURITY_TOKEN=$(</var/tmp/aws-token)
 fi
 
 contains () {
@@ -59,7 +59,7 @@ function aws-session {
   
   # TO-DO: Clear tmp file
   # Look into a way to schedule or run a find --delete command at the start
-  echo "$AWS_SECURITY_TOKEN" > /var/tmp/aws-token
+  echo "$AWS_SECURITY_TOKEN" > /var/var/tmp/aws-token
   echo "AWS session active for ${duration} seconds"
 }
 
