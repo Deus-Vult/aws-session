@@ -1,11 +1,43 @@
 if [ -e "/var/tmp/aws-token" ]; then
-  export AWS_SECURITY_TOKEN=$(</var/tmp/aws-token)
+  IFS="," read access_id access_key token timestamp < "/var/tmp/aws-token"
+  
+  if [[ $timestamp -le $(date +%s) ]]; then
+    export AWS_ACCESS_KEY_ID=$access_id
+    export AWS_SECRET_ACCESS_KEY=$access_key
+    export AWS_SECURITY_TOKEN=$token
+    export AWS_TIMESTAMP=$timestamp
+  fi
 fi
 
-contains () {
+# Utility function that checks if an array contains a value.
+
+contains() {
   local e
   for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
   return 1
+}
+
+# Function to cause a file to be removed once the sleep time has
+# elapsed, even if the terminal it was called from is closed.
+# Intended usage looks like this:
+#
+# selfdestruct <file> <duration> & disown
+
+selfdestruct() {
+  if [ $# != 2 ]; then
+    echo "$0 <file> <duration>"
+    exit 1
+  fi
+  
+  if [ -e "$1" ]; then
+    sleep $2
+    IFS="," read access_id access_key token timestamp < "$1"
+
+    delta=$(( $(date +%s)+$2 ))
+    if [[ delta -ge $timestamp ]]; then
+      rm $1
+    fi
+  fi
 }
 
 function aws-session {
@@ -41,13 +73,16 @@ function aws-session {
     echo "Security token already set"
     return 1
   else
+    unset AWS_ACCESS_KEY_ID
+    unset AWS_SECRET_ACCESS_KEY
     unset AWS_SECURITY_TOKEN
+    unset AWS_TIMESTAMP
   fi
   
   # TO-DO: Shorten lines
-  # TO-DO: Sometimes fails (seems to be for old tokens)
   output="$(aws sts get-session-token --duration-seconds ${duration} --serial-number $MFA_DEVICE --token-code $1)"
   
+  # TO-DO: Investigate if this fucks up for some security keys
   if [[ $? == 0 ]]; then
     export AWS_ACCESS_KEY_ID=$(python -c "import json,sys;text=json.load(sys.stdin);print text['Credentials']['AccessKeyId'];" <<< ${output})
     export AWS_SECRET_ACCESS_KEY=$(python -c "import json,sys;text=json.load(sys.stdin);print text['Credentials']['SecretAccessKey'];" <<< ${output})
@@ -57,9 +92,8 @@ function aws-session {
     return 1
   fi
   
-  # TO-DO: Clear tmp file
-  # Look into a way to schedule or run a find --delete command at the start
-  echo "$AWS_SECURITY_TOKEN" > /var/var/tmp/aws-token
+  echo "$AWS_ACCESS_KEY_ID,$AWS_SECRET_ACCESS_KEY,$AWS_SECURITY_TOKEN,$(date +%s)" > /var/tmp/aws-token
+  selfdestruct "/var/tmp/aws-token" $duration & disown
   echo "AWS session active for ${duration} seconds"
 }
 
