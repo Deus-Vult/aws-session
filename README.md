@@ -6,7 +6,12 @@ A shorthand function I've created for smoothly initiating an AWS MFA session on 
 Python.
 
 ## Usage
+### aws-session
 <pre>aws-session [token] [-o] [-h|--help]</pre>
 Creates a token which will be valid for 3600 seconds.
 
 The <tt>-o</tt> flag will override any previously set token.
+
+### aws-token
+<pre>aws-token</pre>
+This retrieves any previousy set token. This is automatically called when a shell is opened but needs to be called in old shells to propagate the token.
