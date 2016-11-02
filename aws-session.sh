@@ -1,16 +1,4 @@
-if [ -e "/var/tmp/aws-token" ]; then
-  IFS="," read access_id access_key token timestamp < "/var/tmp/aws-token"
-  
-  if [[ $timestamp -le $(date +%s) ]]; then
-    export AWS_ACCESS_KEY_ID=$access_id
-    export AWS_SECRET_ACCESS_KEY=$access_key
-    export AWS_SECURITY_TOKEN=$token
-    export AWS_TIMESTAMP=$timestamp
-  fi
-fi
-
 # Utility function that checks if an array contains a value.
-
 contains() {
   local e
   for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
@@ -22,7 +10,6 @@ contains() {
 # Intended usage looks like this:
 #
 # selfdestruct <file> <duration> & disown
-
 selfdestruct() {
   if [ $# != 2 ]; then
     echo "$0 <file> <duration>"
@@ -40,6 +27,36 @@ selfdestruct() {
   fi
 }
 
+# Reads any previously stored session information
+read_token() {
+  if [ -e "/var/tmp/aws-token" ]; then
+    IFS="," read access_id access_key token timestamp < "/var/tmp/aws-token"
+    
+    if [[ $timestamp -le $(date +%s) ]]; then
+      export AWS_ACCESS_KEY_ID=$access_id
+      export AWS_SECRET_ACCESS_KEY=$access_key
+      export AWS_SECURITY_TOKEN=$token
+      export AWS_TIMESTAMP=$timestamp
+    fi
+  fi
+}
+
+# Read stored session information at shell start
+read_token
+
+# Utility function to retrieve a token that was set
+# by a different shell
+function aws-token {
+  read_token
+  if [[ -n "$AWS_SECURITY_TOKEN" ]]; then
+    echo "AWS security token retrieved"
+  else
+    echo "Found no token"
+    return 1
+  fi
+}
+
+# Initiates and AWS MFA session
 function aws-session {
   # TO-DO: Use a case statement check for arguments?
   # TO-DO: Add an argument for token duration
@@ -82,7 +99,7 @@ function aws-session {
   # TO-DO: Shorten lines
   output="$(aws sts get-session-token --duration-seconds ${duration} --serial-number $MFA_DEVICE --token-code $1)"
   
-  # TO-DO: Investigate if this fucks up for some security keys
+  # TO-DO: Seems to fuck up for some security keys
   if [[ $? == 0 ]]; then
     export AWS_ACCESS_KEY_ID=$(python -c "import json,sys;text=json.load(sys.stdin);print text['Credentials']['AccessKeyId'];" <<< ${output})
     export AWS_SECRET_ACCESS_KEY=$(python -c "import json,sys;text=json.load(sys.stdin);print text['Credentials']['SecretAccessKey'];" <<< ${output})
@@ -98,3 +115,4 @@ function aws-session {
 }
 
 export -f aws-session
+export -f aws-token
